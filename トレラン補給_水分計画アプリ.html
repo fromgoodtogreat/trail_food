@@ -1,0 +1,1773 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trail Fuel Planner - トレラン補給＆水分計画アプリ</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts (Inter & Noto Sans JP) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+    }
+    /* カスタムスクロールバーとスライダーの調整 */
+    input[type="range"] {
+      accent-color: #059669;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-16">
+
+  <!-- 初回プロフィール登録モーダル（身長・体重） -->
+  <div id="profileModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl">
+          <i class="ph-fill ph-user-focus"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">ランナー情報の登録</h2>
+          <p class="text-xs text-slate-500">初回のみ入力してください（ブラウザに保存されます）</p>
+        </div>
+      </div>
+
+      <div class="space-y-4 my-6">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">身長 (cm)</label>
+          <div class="relative">
+            <input type="number" id="modalHeight" value="170" min="100" max="230" step="1"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-semibold text-lg" />
+            <span class="absolute right-4 top-3.5 text-slate-400 font-medium">cm</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">体重 (kg) <span class="text-xs font-normal text-emerald-600">※水分・カロリー計算の基準になります</span></label>
+          <div class="relative">
+            <input type="number" id="modalWeight" value="62" min="30" max="150" step="0.5"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-semibold text-lg" />
+            <span class="absolute right-4 top-3.5 text-slate-400 font-medium">kg</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="saveProfileBtn" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+        <i class="ph-bold ph-check-circle text-lg"></i>
+        保存してはじめる
+      </button>
+    </div>
+  </div>
+
+  <!-- ヘッダー -->
+  <header class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-700 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-2xl">
+          ⛰️
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold tracking-tight leading-tight">Trail Fuel Planner</h1>
+          <p class="text-[11px] sm:text-xs text-emerald-100">トレラン水分＆コンビニ補給食シミュレーター</p>
+        </div>
+      </div>
+
+      <!-- 登録済み身長・体重バッジ（クリックで再編集） -->
+      <button id="editProfileBtn" class="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-white/15">
+        <i class="ph-fill ph-user text-emerald-200"></i>
+        <span id="profileSummaryText">-- cm / -- kg</span>
+        <i class="ph ph-pencil-simple text-emerald-200 text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-5xl mx-auto px-4 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- 左カラム：入力フォーム（コース・時間・気象条件） -->
+    <section class="lg:col-span-5 space-y-5">
+
+      <!-- 1. コースデータ入力カード -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ph-fill ph-mountains text-emerald-600 text-xl"></i>
+            1. コースデータ
+          </h2>
+          <!-- モード切替タブ -->
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+            <button id="tabGpx" class="px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-sm transition">GPX読込</button>
+            <button id="tabManual" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-800 transition">数値入力</button>
+          </div>
+        </div>
+
+        <!-- GPXファイルドロップゾーン -->
+        <div id="gpxDropArea" class="mb-4">
+          <label for="gpxFileInput" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl cursor-pointer bg-emerald-50/40 hover:bg-emerald-50/80 transition p-4 text-center">
+            <i class="ph-duotone ph-file-arrow-up text-3xl text-emerald-600 mb-1"></i>
+            <span class="text-sm font-bold text-emerald-800" id="gpxFileName">GPXファイルを選択 またはドロップ</span>
+            <span class="text-xs text-slate-500 mt-0.5">距離と累積獲得標高(D+)を自動計算します</span>
+            <input id="gpxFileInput" type="file" accept=".gpx,application/gpx+xml,text/xml" class="hidden" />
+          </label>
+          <!-- 簡易標高グラフ描画エリア（GPX読込時に表示） -->
+          <div id="elevationChartContainer" class="hidden mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <div class="flex justify-between text-[11px] text-slate-500 mb-1 font-medium">
+              <span>標高プロファイル</span>
+              <span id="eleMinMaxText">最低 --m / 最高 --m</span>
+            </div>
+            <canvas id="elevationCanvas" class="w-full h-16 block"></canvas>
+          </div>
+        </div>
+
+        <!-- 距離・累積標高の数値入力欄（GPX読込後も微調整可能） -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">総距離 (km)</label>
+            <div class="relative">
+              <input type="number" id="distanceInput" value="25.0" min="1" max="300" step="0.5"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-bold text-slate-800" />
+              <span class="absolute right-3 top-2.5 text-xs text-slate-400 font-semibold">km</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">累積標高 D+ (m)</label>
+            <div class="relative">
+              <input type="number" id="elevationInput" value="1500" min="0" max="20000" step="50"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-bold text-slate-800" />
+              <span class="absolute right-3 top-2.5 text-xs text-slate-400 font-semibold">m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 予想行動時間カード -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ph-fill ph-timer text-emerald-600 text-xl"></i>
+            2. 予想行動時間
+          </h2>
+          <button id="estimateTimeBtn" type="button" class="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+            <i class="ph-bold ph-magic-wand"></i> コースから目安を自動入力
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <div class="relative">
+              <input type="number" id="hoursInput" value="5" min="0" max="72" step="1"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-bold text-slate-800 text-lg" />
+              <span class="absolute right-3.5 top-3 text-xs text-slate-500 font-bold">時間</span>
+            </div>
+          </div>
+          <div>
+            <div class="relative">
+              <select id="minutesInput" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-bold text-slate-800 text-lg bg-white">
+                <option value="0">00 分</option>
+                <option value="15">15 分</option>
+                <option value="30" selected>30 分</option>
+                <option value="45">45 分</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">
+          ※フラット換算距離：<span id="flatDistText" class="font-bold text-slate-700">37.0 km</span> 相当（距離 + 累積標高÷1000×8）
+        </p>
+      </div>
+
+      <!-- 3. 当日の気象条件カード（外枠とステータスバッジを復元・修正） -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ph-fill ph-cloud-sun text-emerald-600 text-xl"></i>
+            3. 当日の天気・気温・湿度
+          </h2>
+          <span id="weatherSourceBadge" class="text-[11px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-md font-semibold">
+            手動設定
+          </span>
+        </div>
+
+        <!-- 山の天気 自動取得 ＆ tenki.jp / てんきとくらす連携パネル -->
+        <div class="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <span class="text-xs font-bold text-emerald-900 flex items-center gap-1">
+              <i class="ph-bold ph-compass text-emerald-600"></i>
+              日付と山の場所から天気を自動反映
+            </span>
+            <div class="flex items-center gap-1.5">
+              <a id="tenkiJpLink" href="https://tenki.jp/lite/mountain/" target="_blank" rel="noopener noreferrer"
+                class="text-[11px] font-bold text-sky-700 bg-white hover:bg-sky-50 border border-sky-200 px-2 py-1 rounded-lg transition flex items-center gap-1 shadow-sm">
+                <span>tenki.jp 山の天気</span>
+                <i class="ph-bold ph-arrow-square-out"></i>
+              </a>
+              <a id="tenkuraLink" href="https://tenkura.n-kishou.co.jp/tk/" target="_blank" rel="noopener noreferrer"
+                class="text-[11px] font-bold text-teal-700 bg-white hover:bg-teal-50 border border-teal-200 px-2 py-1 rounded-lg transition flex items-center gap-1 shadow-sm">
+                <span>てんくら</span>
+                <i class="ph-bold ph-arrow-square-out"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- 走行予定日の選択（今日〜2週間先まで） -->
+          <div>
+            <label class="block text-[11px] font-bold text-emerald-900 mb-1 flex items-center gap-1">
+              <i class="ph-bold ph-calendar-blank text-emerald-600"></i>
+              走行予定日（2週間先まで選択可）
+            </label>
+            <select id="forecastDateSelect" class="w-full px-2.5 py-2 rounded-lg border border-emerald-300 bg-white text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200">
+              <!-- JSで今日〜14日後の日付を自動生成 -->
+            </select>
+          </div>
+
+          <!-- 人気の山・トレランエリア選択 または 自由検索 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select id="mountainPresetSelect" class="w-full px-2.5 py-2 rounded-lg border border-emerald-300 bg-white text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200">
+              <option value="">⛰️ 主要な山・エリアから選ぶ...</option>
+              <option value="35.625,139.243,599,高尾山・陣馬山">高尾山・陣馬山 (599m)</option>
+              <option value="35.783,139.150,1266,奥多摩・御岳山・大岳山">奥多摩・御岳山 (1266m)</option>
+              <option value="35.928,139.324,500,飯能・奥武蔵・伊豆ヶ岳">飯能・奥武蔵エリア (500m)</option>
+              <option value="35.441,139.163,1252,丹沢・大山・塔ノ岳">丹沢・大山・塔ノ岳 (1491m)</option>
+              <option value="35.232,139.021,1212,箱根外輪山・金時山">箱根外輪山・金時山 (1212m)</option>
+              <option value="35.360,138.727,2500,富士山・富士五湖">富士山・富士五湖周辺 (2000m)</option>
+              <option value="36.225,140.106,877,筑波山">筑波山 (877m)</option>
+              <option value="35.970,138.370,2400,八ヶ岳・美ヶ原">八ヶ岳・霧ヶ峰 (2200m)</option>
+              <option value="36.289,137.648,2600,北アルプス・上高地">北アルプス・上高地 (2400m)</option>
+              <option value="34.777,135.263,931,六甲山">六甲山全山縦走 (931m)</option>
+              <option value="34.417,135.683,1125,金剛山・生駒山">金剛山・ダイトレ (1125m)</option>
+              <option value="33.541,130.517,829,宝満山・脊振山">福岡・宝満山 (829m)</option>
+            </select>
+
+            <div class="flex gap-1">
+              <input type="text" id="locationSearchInput" placeholder="山名・市町村名で検索 (例: 秩父)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-white text-xs text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200" />
+              <button type="button" id="searchWeatherBtn"
+                class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shrink-0 transition flex items-center gap-1">
+                <i class="ph-bold ph-magnifying-glass"></i> 反映
+              </button>
+            </div>
+          </div>
+
+          <!-- GPX座標から取得ボタン（GPX読込時に表示） -->
+          <button type="button" id="fetchGpxWeatherBtn" class="hidden w-full py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition items-center justify-center gap-1.5 shadow-sm">
+            <i class="ph-bold ph-map-pin-line"></i>
+            読み込んだGPXの地点・標高から天気予報を自動取得
+          </button>
+
+          <!-- tenki.jp / てんきとくらす コピペ解析アコーディオン -->
+          <details class="group pt-1 border-t border-emerald-200/60">
+            <summary class="text-[11px] font-semibold text-emerald-800 cursor-pointer flex items-center justify-between select-none">
+              <span>📋 tenki.jp / てんきとくらす の画面テキストを貼り付けて反映</span>
+              <i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div class="mt-2 space-y-2">
+              <p class="text-[10px] text-slate-600 leading-relaxed">
+                上のボタンから <strong>tenki.jp（山の天気）</strong> や <strong>てんきとくらす</strong> を開き、予報部分のテキストをコピーして下に貼り付けると、天気・気温・湿度を自動抽出します。
+              </p>
+              <textarea id="pasteWeatherText" rows="2" placeholder="例: 晴れ時々曇り 最高18℃ 最低10℃ 湿度65% 登山指数A など貼り付け"
+                class="w-full p-2 rounded-lg border border-slate-300 text-xs bg-white outline-none focus:border-emerald-500"></textarea>
+              <button type="button" id="parsePastedWeatherBtn"
+                class="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition">
+                貼り付けたテキストから天気を反映する
+              </button>
+            </div>
+          </details>
+        </div>
+
+        <!-- 天気選択ボタン -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">天気予報</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" data-weather="sunny" class="weather-btn py-2.5 px-3 rounded-xl border-2 border-emerald-600 bg-emerald-50/70 text-emerald-900 font-bold text-sm flex items-center justify-center gap-1.5 transition">
+              <span>☀️</span> 晴れ
+            </button>
+            <button type="button" data-weather="cloudy" class="weather-btn py-2.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-sm flex items-center justify-center gap-1.5 transition">
+              <span>☁️</span> 曇り
+            </button>
+            <button type="button" data-weather="rainy" class="weather-btn py-2.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-sm flex items-center justify-center gap-1.5 transition">
+              <span>🌧️</span> 雨
+            </button>
+          </div>
+        </div>
+
+        <!-- 気温スライダー -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs font-bold text-slate-600">予想平均気温</label>
+            <span id="tempValueText" class="text-sm font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg">20 ℃</span>
+          </div>
+          <input type="range" id="tempSlider" min="-5" max="38" step="1" value="20" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer" />
+          <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+            <span>冬山 (-5℃)</span>
+            <span>快適 (15℃)</span>
+            <span>猛暑 (35℃+)</span>
+          </div>
+        </div>
+
+        <!-- 湿度スライダー -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs font-bold text-slate-600">予想湿度</label>
+            <span id="humidityValueText" class="text-sm font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg">60 %</span>
+          </div>
+          <input type="range" id="humiditySlider" min="20" max="95" step="5" value="60" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer" />
+          <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+            <span>乾燥 (20%)</span>
+            <span>普通 (60%)</span>
+            <span>蒸し暑い (90%)</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 右カラム：計算結果＆コンビニ補給食シミュレーター -->
+    <section class="lg:col-span-7 space-y-5">
+
+      <!-- 計算結果サマリーカード -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-5 sm:p-6 shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-emerald-300 text-sm tracking-wide uppercase flex items-center gap-1.5">
+            <i class="ph-fill ph-First-aid-kit"></i> 全行程 トータル必要量
+          </h2>
+          <span id="conditionBadge" class="text-xs bg-white/10 px-2.5 py-1 rounded-full text-emerald-200 font-medium">
+            発汗係数: 標準
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- 必要水分量 -->
+          <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-300 font-semibold">💧 必要水分量（トータル）</span>
+              <span class="text-xs text-sky-300 font-bold" id="waterPerHourText">-- ml / 時間</span>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="totalWaterText" class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">2,200</span>
+              <span class="text-sm font-bold text-sky-300">ml</span>
+            </div>
+            <div class="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-xs text-slate-300">
+              <span>500mlフラスク換算:</span>
+              <span id="flaskCountText" class="font-bold text-amber-300 text-sm">約 4.4 本分</span>
+            </div>
+          </div>
+
+          <!-- 必要補給カロリー -->
+          <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-300 font-semibold">🔥 行動中の目標補給カロリー</span>
+              <span class="text-xs text-amber-300 font-bold" id="calPerHourText">-- kcal / 時間</span>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="targetCaloriesText" class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">1,000</span>
+              <span class="text-sm font-bold text-amber-300">kcal</span>
+            </div>
+            <div class="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-xs text-slate-300">
+              <span>総消費カロリー予測:</span>
+              <span id="totalBurnText" class="font-semibold text-slate-200">2,200 kcal</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 塩分・ワンポイントアドバイス -->
+        <div class="mt-4 bg-emerald-900/40 border border-emerald-500/30 rounded-xl p-3 flex items-start gap-2.5 text-xs text-emerald-100">
+          <i class="ph-fill ph-info text-emerald-400 text-lg shrink-0 mt-0.5"></i>
+          <div id="adviceText" class="leading-relaxed">
+            行動中の塩分（ナトリウム）はトータルで <strong>約 3.5g</strong> の摂取が目安です。柿ピーやおにぎり、スポドリ等からこまめに補給しましょう。
+          </div>
+        </div>
+      </div>
+
+      <!-- コンビニ補給食 提案＆微調整シミュレーター -->
+      <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="font-bold text-slate-800 text-base sm:text-lg flex items-center gap-2">
+              🏪 コンビニ補給食リスト（自動提案＆微調整）
+            </h2>
+            <p class="text-xs text-slate-500">「＋」「ー」ボタンでお好みに合わせて数量を微調整できます</p>
+          </div>
+          <button id="autoSuggestBtn" class="self-start sm:self-auto text-xs font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0">
+            <i class="ph-bold ph-arrows-clockwise"></i> おすすめ構成にリセット
+          </button>
+        </div>
+
+        <!-- カロリー達成度プログレスバー -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-5">
+          <div class="flex justify-between items-baseline mb-1.5">
+            <span class="text-xs font-bold text-slate-600">現在の選択合計カロリー</span>
+            <div class="text-right">
+              <span id="selectedCaloriesText" class="text-xl font-extrabold text-emerald-700">1,020</span>
+              <span class="text-xs text-slate-500 font-semibold"> / 目標 <span id="goalCaloriesInline">1,000</span> kcal</span>
+            </div>
+          </div>
+          <div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div id="calorieProgressBar" class="h-full bg-emerald-500 transition-all duration-300 rounded-full" style="width: 100%"></div>
+          </div>
+          <div class="flex justify-between items-center mt-2 text-xs">
+            <span id="calorieStatusMessage" class="font-bold text-emerald-700">✨ バッチリ！目標補給カロリーを満たしています</span>
+            <span class="text-slate-500 font-medium">合計塩分: <strong id="selectedSaltText" class="text-slate-700">2.8</strong> g</span>
+          </div>
+        </div>
+
+        <!-- 補給食アイテムリスト -->
+        <div id="foodItemsList" class="space-y-2.5">
+          <!-- JSで動的にレンダリング -->
+        </div>
+
+        <!-- 新しい補給食・コンビニ商品を追加するフォーム（平均カロリー自動反映機能つき） -->
+        <div class="mt-5 bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
+              <i class="ph-fill ph-plus-circle text-emerald-600 text-lg"></i>
+              他のコンビニ補給食・お気に入り食品を追加
+            </h3>
+            <span class="text-[11px] text-emerald-700 font-semibold bg-emerald-100/80 px-2 py-0.5 rounded-md">
+              名前入力で平均カロリー自動反映
+            </span>
+          </div>
+
+          <!-- よく追加される定番候補チップ（ワンタップ入力） -->
+          <div class="flex flex-wrap gap-1.5 mb-3">
+            <span class="text-[11px] text-slate-400 self-center mr-1">候補からすぐ入力:</span>
+            <button type="button" data-quick-food="大福" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🍡 大福</button>
+            <button type="button" data-quick-food="バナナ" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🍌 バナナ</button>
+            <button type="button" data-quick-food="カロリーメイト" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🧀 カロリーメイト</button>
+            <button type="button" data-quick-food="わらび餅" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🍡 わらび餅</button>
+            <button type="button" data-quick-food="エネージェル" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">⚡ エナジージェル</button>
+            <button type="button" data-quick-food="ポテトチップス" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🥔 ポテチ小袋</button>
+            <button type="button" data-quick-food="スポドリ" class="quick-food-chip text-[11px] bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 px-2 py-1 rounded-lg transition">🥤 スポドリ500ml</button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+            <div class="sm:col-span-5">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">商品名・食べ物名</label>
+              <input type="text" id="customFoodName" placeholder="例: 豆大福、ランチパック、梅干し..."
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500" />
+            </div>
+            <div class="grid grid-cols-3 gap-2 sm:col-span-5">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">カロリー(自動)</label>
+                <div class="relative">
+                  <input type="number" id="customFoodKcal" value="150" min="0" max="1500" step="10"
+                    class="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-bold text-emerald-700 outline-none focus:border-emerald-500" />
+                  <span class="absolute right-2 top-2 text-[10px] text-slate-400">kcal</span>
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">塩分(g)</label>
+                <input type="number" id="customFoodSalt" value="0.2" min="0" max="20" step="0.1"
+                  class="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">単位</label>
+                <input type="text" id="customFoodUnit" value="個"
+                  class="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-semibold text-slate-700 outline-none focus:border-emerald-500" />
+              </div>
+            </div>
+            <div class="sm:col-span-2">
+              <button type="button" id="addCustomFoodBtn"
+                class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-lg shadow-sm transition flex items-center justify-center gap-1">
+                <i class="ph-bold ph-plus"></i> 追加
+              </button>
+            </div>
+          </div>
+          <p id="autoEstimateHint" class="text-[11px] text-emerald-700 mt-1.5 hidden">
+            💡 商品名から平均的な栄養価を自動入力しました（数値は手動でも調整できます）
+          </p>
+        </div>
+
+        <!-- 買い物メモコピーボタン -->
+        <div class="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="text-xs text-slate-500">
+            💡 スマホのメモ帳やLINEに貼り付けて買い物リストとして使えます
+          </div>
+          <button id="copyListBtn" class="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
+            <i class="ph-bold ph-copy text-base"></i>
+            補給計画＆買い物リストをコピー
+          </button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- トースト通知（コピー完了など） -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm font-semibold flex items-center gap-2 opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+    <i class="ph-fill ph-check-circle text-emerald-400 text-lg"></i>
+    <span id="toastMessage">コピーしました！</span>
+  </div>
+
+  <!-- アプリケーションスクリプト -->
+  <script>
+    // ==========================================
+    // 1. コンビニ補給食データベース（デフォルト＋自動推定用辞書）
+    // ==========================================
+    const DEFAULT_FOOD_ITEMS = [
+      {
+        id: 'onigiri',
+        name: 'おにぎり（鮭・梅・赤飯など）',
+        emoji: '🍙',
+        kcal: 180,
+        salt: 1.2,
+        desc: '腹持ち抜群の定番主食（1個あたり）',
+        unit: '個',
+        isDefault: true
+      },
+      {
+        id: 'yokan',
+        name: '一口ようかん（コンビニPB）',
+        emoji: '🍵',
+        kcal: 150,
+        salt: 0.05,
+        desc: 'コンパクトで走りながらでも食べやすい高糖質枠',
+        unit: '本',
+        isDefault: true
+      },
+      {
+        id: 'kaki_pi',
+        name: '柿ピー（食べきり小袋）',
+        emoji: '🥜',
+        kcal: 140,
+        salt: 0.6,
+        desc: '貴重な塩分補給＆甘いものに飽きた時の救世主（約30g袋）',
+        unit: '袋',
+        isDefault: true
+      },
+      {
+        id: 'black_thunder',
+        name: 'ブラックサンダー',
+        emoji: '⚡',
+        kcal: 110,
+        salt: 0.2,
+        desc: 'サクッと食べられてテンションが上がる即効エネルギー',
+        unit: '個',
+        isDefault: true
+      },
+      {
+        id: 'sweet_bread',
+        name: '菓子パン（あんぱん・ミニパン等）',
+        emoji: '🥐',
+        kcal: 300,
+        salt: 0.5,
+        desc: '高カロリー！山頂や長めの休憩でのしっかり補給に',
+        unit: '袋',
+        isDefault: true
+      },
+      {
+        id: 'in_jelly',
+        name: 'inゼリー エネルギー',
+        emoji: '🧃',
+        kcal: 180,
+        salt: 0.2,
+        desc: '後半で胃腸が疲れて固形物が喉を通らない時のお守り',
+        unit: '個',
+        isDefault: true
+      }
+    ];
+
+    // 商品名を入力した際に平均カロリー・塩分・絵文字・単位を自動反映するための辞書
+    const FOOD_NUTRITION_DICTIONARY = [
+      { keywords: ['大福', '豆大福', 'いちご大福', '餅', 'もち'], emoji: '🍡', kcal: 230, salt: 0.3, unit: '個', desc: '高糖質で腹持ちも良い和菓子補給食' },
+      { keywords: ['わらび餅', 'わらびもち', 'くず餅'], emoji: '🍡', kcal: 160, salt: 0.05, unit: 'パック', desc: '喉越しが良く夏場でも食べやすい和菓子' },
+      { keywords: ['どら焼き', 'どらやき', 'まんじゅう', '饅頭', 'カステラ'], emoji: '🥞', kcal: 240, salt: 0.2, unit: '個', desc: '糖質たっぷりでエネルギー変換が早い和菓子' },
+      { keywords: ['バナナ', 'ばなな'], emoji: '🍌', kcal: 90, salt: 0.0, unit: '本', desc: 'カリウム豊富で脚攣り予防にも定番の果物' },
+      { keywords: ['カロリーメイト', 'バランス栄養', '一本満足', '1本満足', 'ソイジョイ', 'プロテインバー'], emoji: '🧀', kcal: 200, salt: 0.4, unit: '本', desc: 'ビタミン・ミネラルも摂れる栄養調整食品' },
+      { keywords: ['ジェル', 'エネージェル', 'マグオン', 'アミノサウルス', 'メダリスト', 'モルテン', 'アミノバイタル'], emoji: '⚡', kcal: 115, salt: 0.3, unit: '個', desc: '吸収スピード最速のレーシングエナジージェル' },
+      { keywords: ['ランチパック', 'サンドイッチ', 'サンドウィッチ', '惣菜パン', 'カレーパン', 'メロンパン'], emoji: '🥪', kcal: 280, salt: 1.1, unit: '袋', desc: '食べやすく塩分とカロリーをしっかり摂れるパン' },
+      { keywords: ['バウムクーヘン', 'バームクーヘン', 'ドーナツ', 'マフィン', 'スコーン'], emoji: '🍩', kcal: 320, salt: 0.3, unit: '個', desc: 'コンパクトながら超高カロリーな洋菓子' },
+      { keywords: ['ポテトチップス', 'ポテチ', 'じゃがりこ', 'スナック', 'コーンスナック'], emoji: '🥔', kcal: 220, salt: 0.7, unit: '袋', desc: '塩分と脂質・炭水化物を美味しくチャージ' },
+      { keywords: ['ナッツ', 'ミックスナッツ', 'アーモンド', 'くるみ', 'トレイルミックス'], emoji: '🥜', kcal: 250, salt: 0.3, unit: '袋', desc: '良質な脂質で長時間の行動エネルギーに（約40g）' },
+      { keywords: ['グミ', 'ハリボー', '果汁グミ', 'フェットチーネ', 'コーラグミ'], emoji: '🍬', kcal: 160, salt: 0.05, unit: '袋', desc: '噛んでリフレッシュしながら小まめに糖質補給' },
+      { keywords: ['ラムネ', '森永ラムネ', 'ブドウ糖', 'タブレット', '塩タブ', '塩熱'], emoji: '🍬', kcal: 100, salt: 0.5, unit: '袋', desc: '脳のエネルギー源ブドウ糖＆塩分を即効チャージ' },
+      { keywords: ['梅干し', 'うめぼし', 'カリカリ梅', '干し梅', '男梅'], emoji: '🔴', kcal: 30, salt: 2.2, unit: '袋', desc: 'クエン酸と圧倒的な塩分で疲労＆足攣り対策' },
+      { keywords: ['チョコ', 'スニッカーズ', 'キットカット', 'ガルボ', 'きのこの山', 'たけのこの里'], emoji: '🍫', kcal: 210, salt: 0.15, unit: '袋', desc: '高エネルギーで行動中のご褒美になるチョコレート' },
+      { keywords: ['スポドリ', 'ポカリ', 'アクエリアス', 'グリーンダカラ', '麦茶', '経口補水液', 'os-1'], emoji: '🥤', kcal: 100, salt: 0.6, unit: '本', desc: '500mlペットボトル1本分の水分・糖質・電解質' },
+      { keywords: ['コーラ', 'サイダー', 'ファンタ', 'レッドブル', 'モンスター', 'エナジードリンク'], emoji: '🥫', kcal: 180, salt: 0.05, unit: '本', desc: 'カフェインと糖分で後半の元気を一気にブースト' },
+      { keywords: ['からあげクン', 'からあげ', 'サラダチキン', 'ちくわ', 'ソーセージ', '魚肉', 'チーズ', 'さけるチーズ', 'カルパス', 'ジャーキー'], emoji: '🍗', kcal: 150, salt: 1.4, unit: 'パック', desc: 'たんぱく質と塩分が摂れるしょっぱい系補給食' },
+      { keywords: ['ドライフルーツ', 'レーズン', 'マンゴー', 'デーツ', '干し芋', 'ほしいも'], emoji: '🍠', kcal: 190, salt: 0.05, unit: '袋', desc: '食物繊維と自然な糖質・ミネラルが豊富な自然派行動食' }
+    ];
+
+    let FOOD_ITEMS = [...DEFAULT_FOOD_ITEMS];
+
+    // ==========================================
+    // 2. アプリケーションの状態 (State)
+    // ==========================================
+    const state = {
+      height: 170,
+      weight: 62,
+      distance: 25.0,
+      elevation: 1500,
+      hours: 5,
+      minutes: 30,
+      weather: 'sunny', // 'sunny' | 'cloudy' | 'rainy'
+      temp: 20,
+      humidity: 60,
+      targetCalories: 1000,
+      totalWaterMl: 2000,
+      recommendedSaltG: 3.0,
+      selectedDate: '', // YYYY-MM-DD（今日〜14日後）
+      activeWeatherLocation: null, // { lat, lon, ele, name } 日付変更時に再取得するため保持
+      gpxLocation: null, // { lat, lon, avgEle }
+      foodCounts: {
+        onigiri: 2,
+        yokan: 2,
+        kaki_pi: 1,
+        black_thunder: 2,
+        sweet_bread: 0,
+        in_jelly: 0
+      }
+    };
+
+    const STORAGE_KEY = 'trail_fuel_runner_profile_v1';
+    const CUSTOM_FOOD_STORAGE_KEY = 'trail_fuel_custom_foods_v1';
+
+    // ==========================================
+    // 3. 初期化処理 & イベントリスナー登録
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initForecastDateOptions();
+      initProfile();
+      loadCustomFoods();
+      bindEvents();
+      calculateMetrics(true); // 初回は自動提案も実行
+    });
+
+    // 今日から2週間先（14日後）までの日付プルダウンを生成
+    function initForecastDateOptions() {
+      const select = document.getElementById('forecastDateSelect');
+      select.innerHTML = '';
+      const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+      const today = new Date();
+
+      for (let i = 0; i <= 14; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        const dayLabel = dayNames[d.getDay()];
+
+        let prefix = '';
+        if (i === 0) prefix = '【今日】 ';
+        else if (i === 1) prefix = '【明日】 ';
+        else if (i === 2) prefix = '【明後日】 ';
+
+        const opt = document.createElement('option');
+        opt.value = dateStr;
+        opt.textContent = `${prefix}${Number(mm)}月${Number(dd)}日 (${dayLabel}) ${i > 0 ? `— ${i}日後` : ''}`;
+        select.appendChild(opt);
+
+        if (i === 0) {
+          state.selectedDate = dateStr;
+        }
+      }
+    }
+
+    function initProfile() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.height && parsed.weight) {
+            state.height = Number(parsed.height);
+            state.weight = Number(parsed.weight);
+            updateProfileBadge();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('localStorageの読み込みに失敗しました:', e);
+      }
+      // 未登録なら初回モーダルを表示
+      openProfileModal();
+    }
+
+    function openProfileModal() {
+      document.getElementById('modalHeight').value = state.height;
+      document.getElementById('modalWeight').value = state.weight;
+      const modal = document.getElementById('profileModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeProfileModal() {
+      const modal = document.getElementById('profileModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function updateProfileBadge() {
+      document.getElementById('profileSummaryText').textContent = `${state.height} cm / ${state.weight} kg`;
+    }
+
+    function bindEvents() {
+      // プロフィール保存・編集
+      document.getElementById('saveProfileBtn').addEventListener('click', () => {
+        const h = parseFloat(document.getElementById('modalHeight').value) || 170;
+        const w = parseFloat(document.getElementById('modalWeight').value) || 60;
+        state.height = Math.min(230, Math.max(100, h));
+        state.weight = Math.min(150, Math.max(30, w));
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ height: state.height, weight: state.weight }));
+        } catch (e) {
+          console.warn('localStorageへの保存に失敗しました:', e);
+        }
+        updateProfileBadge();
+        closeProfileModal();
+        calculateMetrics(true);
+        showToast('ランナー情報を保存しました');
+      });
+
+      document.getElementById('editProfileBtn').addEventListener('click', openProfileModal);
+
+      // GPX / 数値入力タブ切り替え
+      const tabGpx = document.getElementById('tabGpx');
+      const tabManual = document.getElementById('tabManual');
+      const gpxDropArea = document.getElementById('gpxDropArea');
+
+      tabGpx.addEventListener('click', () => {
+        gpxDropArea.classList.remove('hidden');
+        tabGpx.className = 'px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-sm transition';
+        tabManual.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-800 transition';
+      });
+
+      tabManual.addEventListener('click', () => {
+        gpxDropArea.classList.add('hidden');
+        tabManual.className = 'px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-sm transition';
+        tabGpx.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-800 transition';
+      });
+
+      // GPXファイル読み込み（クリック＆ドラッグ＆ドロップ）
+      const gpxInput = document.getElementById('gpxFileInput');
+      gpxInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleGpxFile(e.target.files[0]);
+        }
+      });
+
+      const dropLabel = gpxDropArea.querySelector('label');
+      dropLabel.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropLabel.classList.add('bg-emerald-100/80', 'border-emerald-600');
+      });
+      dropLabel.addEventListener('dragleave', () => {
+        dropLabel.classList.remove('bg-emerald-100/80', 'border-emerald-600');
+      });
+      dropLabel.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropLabel.classList.remove('bg-emerald-100/80', 'border-emerald-600');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleGpxFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // コース・時間の入力イベント
+      document.getElementById('distanceInput').addEventListener('input', (e) => {
+        state.distance = Math.max(0, parseFloat(e.target.value) || 0);
+        calculateMetrics(true);
+      });
+
+      document.getElementById('elevationInput').addEventListener('input', (e) => {
+        state.elevation = Math.max(0, parseFloat(e.target.value) || 0);
+        calculateMetrics(true);
+      });
+
+      document.getElementById('hoursInput').addEventListener('input', (e) => {
+        state.hours = Math.max(0, parseInt(e.target.value, 10) || 0);
+        calculateMetrics(true);
+      });
+
+      document.getElementById('minutesInput').addEventListener('change', (e) => {
+        state.minutes = parseInt(e.target.value, 10) || 0;
+        calculateMetrics(true);
+      });
+
+      // コースから目安時間を自動計算ボタン
+      document.getElementById('estimateTimeBtn').addEventListener('click', () => {
+        estimateActionTime();
+        calculateMetrics(true);
+        showToast('コースデータから目安行動時間を算出しました');
+      });
+
+      // 天気ボタン
+      document.querySelectorAll('.weather-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.weather = btn.getAttribute('data-weather');
+          document.querySelectorAll('.weather-btn').forEach((b) => {
+            if (b.getAttribute('data-weather') === state.weather) {
+              b.className = 'weather-btn py-2.5 px-3 rounded-xl border-2 border-emerald-600 bg-emerald-50/70 text-emerald-900 font-bold text-sm flex items-center justify-center gap-1.5 transition';
+            } else {
+              b.className = 'weather-btn py-2.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-sm flex items-center justify-center gap-1.5 transition';
+            }
+          });
+          calculateMetrics(false); // 水分のみ変化するので食料リセットはしない
+        });
+      });
+
+      // 気温・湿度スライダー
+      document.getElementById('tempSlider').addEventListener('input', (e) => {
+        state.temp = parseInt(e.target.value, 10);
+        document.getElementById('tempValueText').textContent = `${state.temp} ℃`;
+        const badge = document.getElementById('weatherSourceBadge');
+        if (badge) badge.textContent = '手動調整';
+        calculateMetrics(false);
+      });
+
+      document.getElementById('humiditySlider').addEventListener('input', (e) => {
+        state.humidity = parseInt(e.target.value, 10);
+        document.getElementById('humidityValueText').textContent = `${state.humidity} %`;
+        const badge = document.getElementById('weatherSourceBadge');
+        if (badge) badge.textContent = '手動調整';
+        calculateMetrics(false);
+      });
+
+      // --- 山の天気取得＆tenki.jp / てんきとくらす連携イベント ---
+      document.getElementById('forecastDateSelect').addEventListener('change', (e) => {
+        state.selectedDate = e.target.value;
+        // 既に山・エリアやGPX地点が選択されていれば、新しい日付の天気予報を即座に再取得
+        if (state.activeWeatherLocation) {
+          const { lat, lon, ele, name } = state.activeWeatherLocation;
+          fetchMountainWeather(lat, lon, ele, name);
+        } else {
+          showToast('走行予定日を変更しました（山・エリアを選ぶとその日の天気を反映します）');
+        }
+      });
+
+      document.getElementById('mountainPresetSelect').addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        const [lat, lon, ele, name] = val.split(',');
+        updateExternalWeatherLinks(name);
+        fetchMountainWeather(parseFloat(lat), parseFloat(lon), parseFloat(ele), name);
+      });
+
+      document.getElementById('searchWeatherBtn').addEventListener('click', () => {
+        const query = document.getElementById('locationSearchInput').value.trim();
+        if (!query) {
+          showToast('山名や地域名を入力してください');
+          return;
+        }
+        searchLocationAndFetchWeather(query);
+      });
+
+      document.getElementById('locationSearchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.getElementById('searchWeatherBtn').click();
+        }
+      });
+
+      document.getElementById('fetchGpxWeatherBtn').addEventListener('click', () => {
+        if (state.gpxLocation) {
+          const { lat, lon, avgEle } = state.gpxLocation;
+          fetchMountainWeather(lat, lon, avgEle, `GPX地点(標高約${avgEle}m)`);
+        }
+      });
+
+      document.getElementById('parsePastedWeatherBtn').addEventListener('click', () => {
+        const rawText = document.getElementById('pasteWeatherText').value.trim();
+        if (!rawText) {
+          showToast('tenki.jpやてんきとくらすのテキストを貼り付けてください');
+          return;
+        }
+        parsePastedWeatherText(rawText);
+      });
+
+      // --- カスタム補給食の自動カロリー推測＆追加イベント ---
+      const customNameInput = document.getElementById('customFoodName');
+      customNameInput.addEventListener('input', (e) => {
+        autoEstimateNutritionFromName(e.target.value);
+      });
+
+      document.querySelectorAll('.quick-food-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const foodName = chip.getAttribute('data-quick-food');
+          customNameInput.value = foodName;
+          autoEstimateNutritionFromName(foodName);
+        });
+      });
+
+      document.getElementById('addCustomFoodBtn').addEventListener('click', addCustomFoodItem);
+
+      // おすすめ構成にリセットボタン
+      document.getElementById('autoSuggestBtn').addEventListener('click', () => {
+        autoSuggestFood(state.targetCalories, getTotalHours());
+        renderFoodList();
+        showToast('おすすめ補給食セットを再編成しました');
+      });
+
+      // 買い物リストをコピーボタン
+      document.getElementById('copyListBtn').addEventListener('click', copyShoppingList);
+    }
+
+    // ==========================================
+    // 3.5 山の天気取得（Open-Meteo API + 標高補正）＆ tenki.jp / てんくら連携
+    // ==========================================
+    // 「富士山」や「高尾」など手入力検索でも確実にヒットさせるための国内主要山岳辞書
+    const JAPAN_MOUNTAIN_DICTIONARY = [
+      { keywords: ['富士山', '富士', '富士五湖', '河口湖', '吉田'], lat: 35.3606, lon: 138.7274, ele: 2300, name: '富士山・富士五湖周辺' },
+      { keywords: ['高尾', '陣馬', '景信', '城山'], lat: 35.625, lon: 139.243, ele: 599, name: '高尾山・陣馬山' },
+      { keywords: ['奥多摩', '御岳', '大岳', '三頭', '雲取', 'ハセツネ'], lat: 35.783, lon: 139.15, ele: 1266, name: '奥多摩・御岳山' },
+      { keywords: ['飯能', '奥武蔵', '伊豆ヶ岳', '武甲', '秩父'], lat: 35.928, lon: 139.324, ele: 700, name: '飯能・奥武蔵・秩父' },
+      { keywords: ['丹沢', '大山', '塔ノ岳', '鍋割', '蛭ヶ岳', '秦野'], lat: 35.441, lon: 139.163, ele: 1252, name: '丹沢・大山・塔ノ岳' },
+      { keywords: ['箱根', '金時', '明神ヶ岳', '芦ノ湖'], lat: 35.232, lon: 139.021, ele: 1100, name: '箱根外輪山・金時山' },
+      { keywords: ['筑波', 'つくば'], lat: 36.225, lon: 140.106, ele: 877, name: '筑波山' },
+      { keywords: ['日光', '男体山', '女峰山', '赤城', '榛名', '妙義'], lat: 36.765, lon: 139.49, ele: 1600, name: '日光・北関東エリア' },
+      { keywords: ['八ヶ岳', '美ヶ原', '霧ヶ峰', '蓼科', '諏訪'], lat: 35.97, lon: 138.37, ele: 2100, name: '八ヶ岳・霧ヶ峰' },
+      { keywords: ['北アルプス', '上高地', '槍ヶ岳', '穂高', '白馬', '燕岳'], lat: 36.289, lon: 137.648, ele: 2400, name: '北アルプス・上高地' },
+      { keywords: ['南アルプス', '甲斐駒', '北岳', '仙丈ヶ岳'], lat: 35.674, lon: 138.238, ele: 2400, name: '南アルプス' },
+      { keywords: ['六甲', '摩耶', '宝塚', '須磨'], lat: 34.777, lon: 135.263, ele: 850, name: '六甲山系' },
+      { keywords: ['金剛', '生駒', '葛城', 'ダイトレ'], lat: 34.417, lon: 135.683, ele: 1050, name: '金剛山・生駒山' },
+      { keywords: ['比叡', '京都', '東山', '愛宕'], lat: 35.066, lon: 135.838, ele: 750, name: '京都・比叡山エリア' },
+      { keywords: ['宝満', '脊振', '皿倉', '平尾台', '阿蘇', '九重', 'くじゅう'], lat: 33.541, lon: 130.517, ele: 829, name: '九州・宝満山エリア' }
+    ];
+
+    function updateExternalWeatherLinks(mountainName) {
+      const cleanName = mountainName.replace(/\(.*\)/, '').split('・')[0].trim();
+      const tenkiLink = document.getElementById('tenkiJpLink');
+      const tenkuraLink = document.getElementById('tenkuraLink');
+      if (tenkiLink) {
+        tenkiLink.href = cleanName
+          ? `https://tenki.jp/search/?keyword=${encodeURIComponent(cleanName)}`
+          : 'https://tenki.jp/lite/mountain/';
+      }
+      if (tenkuraLink) {
+        tenkuraLink.href = 'https://tenkura.n-kishou.co.jp/tk/';
+      }
+    }
+
+    async function searchLocationAndFetchWeather(query) {
+      const cleanQuery = query.trim();
+
+      // 1. まず内蔵の主要山岳辞書に一致があるかチェック（「富士山」などの検索に即座に対応）
+      const dictMatch = JAPAN_MOUNTAIN_DICTIONARY.find((entry) =>
+        entry.keywords.some((kw) => cleanQuery.includes(kw) || kw.includes(cleanQuery))
+      );
+      if (dictMatch) {
+        updateExternalWeatherLinks(dictMatch.name);
+        await fetchMountainWeather(dictMatch.lat, dictMatch.lon, dictMatch.ele, dictMatch.name);
+        return;
+      }
+
+      // 2. プリセットプルダウン内に部分一致があるか確認
+      const presetOptions = Array.from(document.getElementById('mountainPresetSelect').options);
+      const matchedPreset = presetOptions.find((opt) => opt.value && opt.textContent.includes(cleanQuery));
+      if (matchedPreset) {
+        const [lat, lon, ele, name] = matchedPreset.value.split(',');
+        updateExternalWeatherLinks(name);
+        await fetchMountainWeather(parseFloat(lat), parseFloat(lon), parseFloat(ele), name);
+        return;
+      }
+
+      // 3. Open-Meteo Geocoding API で全国の地名・山名を検索
+      try {
+        showToast(`「${cleanQuery}」の場所を検索中...`);
+        updateExternalWeatherLinks(cleanQuery);
+        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanQuery)}&count=5&language=ja&format=json`;
+        const res = await fetch(geoUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            // 日本国内の結果を優先
+            const place = data.results.find((r) => r.country_code === 'JP') || data.results[0];
+            const targetEle = place.elevation || Math.min(1200, Math.round(state.elevation * 0.4));
+            await fetchMountainWeather(place.latitude, place.longitude, targetEle, place.name);
+            return;
+          }
+        }
+        showToast('場所が見つかりませんでした。主要エリア選択またはtenki.jp貼り付けをお試しください');
+      } catch (e) {
+        console.error(e);
+        showToast('場所検索に失敗しました。プルダウンからの選択をお試しください');
+      }
+    }
+
+    async function fetchMountainWeather(lat, lon, targetElevationM, labelName) {
+      try {
+        // 現在の場所を記憶（日付を切り替えた時に自動で再取得できるようにする）
+        state.activeWeatherLocation = { lat, lon, ele: targetElevationM, name: labelName };
+
+        const dateSelectEl = document.getElementById('forecastDateSelect');
+        const targetDate = state.selectedDate || (dateSelectEl ? dateSelectEl.value : '');
+        const shortDateLabel = targetDate ? targetDate.slice(5).replace('-', '/') : '当日';
+
+        showToast(`${labelName}（${shortDateLabel}）の気象予報を取得中...`);
+
+        // Open-Meteo APIで確実にサポートされている標準パラメータのみを指定（400エラー防止）
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,relative_humidity_2m,weather_code&hourly=relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Asia%2FTokyo&forecast_days=16`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`HTTP status ${res.status}`);
+        }
+        const data = await res.json();
+
+        const gridElevation = typeof data.elevation === 'number' ? data.elevation : 0;
+        const dailyTimes = data.daily?.time || [];
+        let dayIdx = dailyTimes.indexOf(targetDate);
+        if (dayIdx === -1) dayIdx = 0;
+
+        // 選択された日付の「日中の行動時間帯」の気温を算出（最高気温70%＋最低気温30%の加重平均）
+        let baseTemp = 15;
+        const tMax = data.daily?.temperature_2m_max?.[dayIdx];
+        const tMin = data.daily?.temperature_2m_min?.[dayIdx];
+        if (typeof tMax === 'number' && typeof tMin === 'number') {
+          baseTemp = tMax * 0.7 + tMin * 0.3;
+        } else if (typeof tMax === 'number') {
+          baseTemp = tMax;
+        } else if (typeof data.current?.temperature_2m === 'number') {
+          baseTemp = data.current.temperature_2m;
+        }
+
+        // 標高差による気温逓減補正（標高が100m上がるごとに0.6℃低下）
+        const eleDiff = Math.max(0, targetElevationM - gridElevation);
+        const lapseCorrection = (eleDiff / 100) * 0.6;
+        const mountainTemp = Math.max(-5, Math.min(38, Math.round(baseTemp - lapseCorrection)));
+
+        // 選択された日付の日中（9時〜15時）の平均湿度をhourlyデータから算出
+        let rawHum = data.current?.relative_humidity_2m ?? 60;
+        if (data.hourly?.time && data.hourly?.relative_humidity_2m && targetDate) {
+          const dayHumidities = [];
+          data.hourly.time.forEach((tStr, idx) => {
+            if (tStr.startsWith(targetDate)) {
+              const hour = parseInt(tStr.slice(11, 13), 10);
+              if (hour >= 8 && hour <= 16) {
+                const hVal = data.hourly.relative_humidity_2m[idx];
+                if (typeof hVal === 'number') dayHumidities.push(hVal);
+              }
+            }
+          });
+          if (dayHumidities.length > 0) {
+            rawHum = dayHumidities.reduce((a, b) => a + b, 0) / dayHumidities.length;
+          }
+        }
+        const humidity = Math.max(20, Math.min(95, Math.round(rawHum / 5) * 5));
+
+        // 選択された日付の天気コードを取得
+        const code =
+          data.daily?.weather_code?.[dayIdx] ??
+          data.current?.weather_code ??
+          0;
+
+        let weatherType = 'sunny';
+        if (code >= 51) {
+          weatherType = 'rainy';
+        } else if (code >= 2) {
+          weatherType = 'cloudy';
+        }
+
+        applyWeatherToUI(weatherType, mountainTemp, humidity, `📍 ${shortDateLabel} ${labelName}`);
+        showToast(`${shortDateLabel} ${labelName}の予報（${mountainTemp}℃ / 湿度${humidity}%）を反映しました！`);
+      } catch (err) {
+        console.error('Weather Fetch Error:', err);
+        showToast('気象データの取得に失敗しました。通信環境をご確認ください');
+      }
+    }
+
+    // tenki.jp や てんきとくらす からコピペされたテキストを解析して反映
+    function parsePastedWeatherText(text) {
+      let detectedWeather = state.weather;
+      if (text.includes('雨') || text.includes('雪') || text.includes('雷')) {
+        detectedWeather = 'rainy';
+      } else if (text.includes('曇') || text.includes('くもり')) {
+        detectedWeather = 'cloudy';
+      } else if (text.includes('晴')) {
+        detectedWeather = 'sunny';
+      }
+
+      // 気温（〇℃ または 〇度）を抽出
+      const tempMatches = [...text.matchAll(/(-?\d+(?:\.\d+)?)\s*(?:℃|度)/g)].map((m) => parseFloat(m[1]));
+      let detectedTemp = state.temp;
+      if (tempMatches.length >= 2) {
+        // 最高気温・最低気温が含まれる場合は行動時間帯の平均を採用
+        const sum = tempMatches.reduce((a, b) => a + b, 0);
+        detectedTemp = Math.round(sum / tempMatches.length);
+      } else if (tempMatches.length === 1) {
+        detectedTemp = Math.round(tempMatches[0]);
+      }
+
+      // 湿度（〇%）を抽出（降水確率と区別するため「湿度」付近または妥当な値を抽出）
+      let detectedHumidity = state.humidity;
+      const humMatch = text.match(/湿度\s*[:：]?\s*(\d{2})\s*[%％]/);
+      if (humMatch) {
+        detectedHumidity = Math.round(parseInt(humMatch[1], 10) / 5) * 5;
+      } else if (detectedWeather === 'rainy') {
+        detectedHumidity = 85;
+      }
+
+      // てんきとくらすの登山指数（A/B/C）が含まれている場合の補足
+      let sourceNote = '📋 tenki.jp / てんくら反映';
+      if (text.match(/指数\s*[CＣ]|ランク\s*[CＣ]/)) {
+        sourceNote = '📋 てんくら指数C (悪天・強風注意)';
+      } else if (text.match(/指数\s*[AＡ]|ランク\s*[AＡ]/)) {
+        sourceNote = '📋 てんくら指数A (好天)';
+      }
+
+      detectedTemp = Math.max(-5, Math.min(38, detectedTemp));
+      detectedHumidity = Math.max(20, Math.min(95, detectedHumidity));
+
+      applyWeatherToUI(detectedWeather, detectedTemp, detectedHumidity, sourceNote);
+      showToast('貼り付けたテキストから気象条件を反映しました！');
+    }
+
+    function applyWeatherToUI(weatherType, temp, humidity, sourceLabel) {
+      state.weather = weatherType;
+      state.temp = temp;
+      state.humidity = humidity;
+
+      // 天気ボタンのハイライト更新
+      document.querySelectorAll('.weather-btn').forEach((b) => {
+        if (b.getAttribute('data-weather') === state.weather) {
+          b.className = 'weather-btn py-2.5 px-3 rounded-xl border-2 border-emerald-600 bg-emerald-50/70 text-emerald-900 font-bold text-sm flex items-center justify-center gap-1.5 transition';
+        } else {
+          b.className = 'weather-btn py-2.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-sm flex items-center justify-center gap-1.5 transition';
+        }
+      });
+
+      document.getElementById('tempSlider').value = state.temp;
+      document.getElementById('tempValueText').textContent = `${state.temp} ℃`;
+
+      document.getElementById('humiditySlider').value = state.humidity;
+      document.getElementById('humidityValueText').textContent = `${state.humidity} %`;
+
+      const badge = document.getElementById('weatherSourceBadge');
+      if (badge) {
+        badge.textContent = sourceLabel;
+        badge.className = 'text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-md font-bold';
+      }
+
+      calculateMetrics(false);
+    }
+
+    // ==========================================
+    // 3.8 カスタム補給食の自動カロリー推測 ＆ 追加・削除
+    // ==========================================
+    function loadCustomFoods() {
+      try {
+        const saved = localStorage.getItem(CUSTOM_FOOD_STORAGE_KEY);
+        if (saved) {
+          const customItems = JSON.parse(saved);
+          if (Array.isArray(customItems)) {
+            FOOD_ITEMS = [...DEFAULT_FOOD_ITEMS, ...customItems];
+            customItems.forEach((item) => {
+              if (state.foodCounts[item.id] === undefined) {
+                state.foodCounts[item.id] = 0;
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('カスタム食品の読み込みに失敗しました:', e);
+      }
+    }
+
+    function saveCustomFoods() {
+      try {
+        const customItems = FOOD_ITEMS.filter((item) => !item.isDefault);
+        localStorage.setItem(CUSTOM_FOOD_STORAGE_KEY, JSON.stringify(customItems));
+      } catch (e) {
+        console.warn('カスタム食品の保存に失敗しました:', e);
+      }
+    }
+
+    // 入力された商品名から平均的なカロリー・塩分・単位をリアルタイムで自動反映
+    function autoEstimateNutritionFromName(nameText) {
+      const clean = nameText.trim().toLowerCase();
+      const hint = document.getElementById('autoEstimateHint');
+      if (!clean) {
+        hint.classList.add('hidden');
+        return;
+      }
+
+      for (const entry of FOOD_NUTRITION_DICTIONARY) {
+        if (entry.keywords.some((kw) => clean.includes(kw.toLowerCase()))) {
+          document.getElementById('customFoodKcal').value = entry.kcal;
+          document.getElementById('customFoodSalt').value = entry.salt;
+          document.getElementById('customFoodUnit').value = entry.unit;
+          hint.textContent = `💡 「${nameText}」の平均値（約${entry.kcal}kcal / 塩分${entry.salt}g）を自動入力しました！`;
+          hint.classList.remove('hidden');
+          return;
+        }
+      }
+
+      hint.classList.add('hidden');
+    }
+
+    function addCustomFoodItem() {
+      const nameInput = document.getElementById('customFoodName');
+      const kcalInput = document.getElementById('customFoodKcal');
+      const saltInput = document.getElementById('customFoodSalt');
+      const unitInput = document.getElementById('customFoodUnit');
+
+      const name = nameInput.value.trim();
+      if (!name) {
+        showToast('追加する食べ物の名前を入力してください');
+        return;
+      }
+
+      const kcal = Math.max(0, parseInt(kcalInput.value, 10) || 150);
+      const salt = Math.max(0, parseFloat(saltInput.value) || 0.2);
+      const unit = unitInput.value.trim() || '個';
+
+      // 辞書からぴったりの絵文字と説明を探す
+      let emoji = '🎒';
+      let desc = 'カスタム追加した補給食';
+      const clean = name.toLowerCase();
+      for (const entry of FOOD_NUTRITION_DICTIONARY) {
+        if (entry.keywords.some((kw) => clean.includes(kw.toLowerCase()))) {
+          emoji = entry.emoji;
+          desc = entry.desc;
+          break;
+        }
+      }
+
+      const id = 'custom_' + Date.now();
+      const newItem = {
+        id,
+        name,
+        emoji,
+        kcal,
+        salt,
+        desc,
+        unit,
+        isDefault: false
+      };
+
+      FOOD_ITEMS.push(newItem);
+      state.foodCounts[id] = 1; // 追加と同時に1個選択状態にする
+      saveCustomFoods();
+      renderFoodList();
+
+      nameInput.value = '';
+      document.getElementById('autoEstimateHint').classList.add('hidden');
+      showToast(`「${emoji} ${name} (${kcal}kcal)」をリストに追加しました！`);
+    }
+
+    // ==========================================
+    // 4. GPXファイルの解析ロジック
+    // ==========================================
+    function handleGpxFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const xmlText = e.target.result;
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+
+          // trkpt または rtept を取得
+          let points = Array.from(xmlDoc.getElementsByTagName('trkpt'));
+          if (points.length === 0) {
+            points = Array.from(xmlDoc.getElementsByTagName('rtept'));
+          }
+
+          if (points.length < 2) {
+            showToast('GPX内に有効なルート座標が見つかりませんでした');
+            return;
+          }
+
+          let totalDistKm = 0;
+          let totalElevationGain = 0;
+          const elevations = [];
+
+          let prevLat = null;
+          let prevLon = null;
+          let smoothedEle = null;
+
+          points.forEach((pt) => {
+            const lat = parseFloat(pt.getAttribute('lat'));
+            const lon = parseFloat(pt.getAttribute('lon'));
+            const eleNode = pt.getElementsByTagName('ele')[0];
+            const ele = eleNode ? parseFloat(eleNode.textContent) : null;
+
+            if (!isNaN(lat) && !isNaN(lon)) {
+              if (prevLat !== null && prevLon !== null) {
+                totalDistKm += haversineDistance(prevLat, prevLon, lat, lon);
+              }
+              prevLat = lat;
+              prevLon = lon;
+            }
+
+            if (ele !== null && !isNaN(ele)) {
+              elevations.push(ele);
+              // GPSの細かい標高ノイズを抑えるため、4m以上の変化で累積加算
+              if (smoothedEle === null) {
+                smoothedEle = ele;
+              } else {
+                const diff = ele - smoothedEle;
+                if (Math.abs(diff) >= 4.0) {
+                  if (diff > 0) {
+                    totalElevationGain += diff;
+                  }
+                  smoothedEle = ele;
+                }
+              }
+            }
+          });
+
+          // 解析結果を反映
+          state.distance = Math.round(totalDistKm * 10) / 10;
+          state.elevation = Math.round(totalElevationGain / 10) * 10;
+
+          document.getElementById('distanceInput').value = state.distance;
+          document.getElementById('elevationInput').value = state.elevation;
+          document.getElementById('gpxFileName').textContent = `✅ ${file.name}`;
+
+          // GPXのスタート座標と平均標高を保存し、その場所の天気を自動取得可能にする
+          const firstPt = points[0];
+          const startLat = parseFloat(firstPt.getAttribute('lat'));
+          const startLon = parseFloat(firstPt.getAttribute('lon'));
+          const avgEle = elevations.length > 0
+            ? Math.round(elevations.reduce((a, b) => a + b, 0) / elevations.length)
+            : 800;
+
+          if (!isNaN(startLat) && !isNaN(startLon)) {
+            state.gpxLocation = { lat: startLat, lon: startLon, avgEle };
+            const gpxWeatherBtn = document.getElementById('fetchGpxWeatherBtn');
+            gpxWeatherBtn.classList.remove('hidden');
+            gpxWeatherBtn.classList.add('flex');
+            // GPX読み込みと同時にその山域の天気も自動取得
+            fetchMountainWeather(startLat, startLon, avgEle, `GPX山域(平均標高${avgEle}m)`);
+          }
+
+          // 簡易標高グラフの描画
+          if (elevations.length > 5) {
+            drawElevationChart(elevations);
+          }
+
+          // 行動時間の目安も自動更新し、計算を実行
+          estimateActionTime();
+          calculateMetrics(true);
+          showToast('GPXから距離・累積標高・現地の天気を解析しました！');
+        } catch (err) {
+          console.error(err);
+          showToast('GPXファイルの解析に失敗しました');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 2点間の距離 (km) を求める Haversine 公式
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // 地球半径 (km)
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // 標高プロファイルのCanvas描画
+    function drawElevationChart(elevations) {
+      const container = document.getElementById('elevationChartContainer');
+      container.classList.remove('hidden');
+
+      const minEle = Math.round(Math.min(...elevations));
+      const maxEle = Math.round(Math.max(...elevations));
+      document.getElementById('eleMinMaxText').textContent = `最低 ${minEle}m / 最高 ${maxEle}m`;
+
+      const canvas = document.getElementById('elevationCanvas');
+      const ctx = canvas.getContext('2d');
+      const width = (canvas.width = canvas.clientWidth || 300);
+      const height = (canvas.height = 64);
+
+      ctx.clearRect(0, 0, width, height);
+
+      const range = Math.max(50, maxEle - minEle);
+      const step = Math.max(1, Math.floor(elevations.length / width));
+
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+
+      for (let i = 0; i < elevations.length; i += step) {
+        const x = (i / (elevations.length - 1)) * width;
+        const y = height - ((elevations[i] - minEle) / range) * (height - 12) - 4;
+        ctx.lineTo(x, y);
+      }
+
+      ctx.lineTo(width, height);
+      ctx.closePath();
+
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
+      grad.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = '#059669';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // コース距離と累積標高から一般的なトレラン行動時間目安を推計
+    function estimateActionTime() {
+      const flatDist = state.distance + (state.elevation / 1000) * 8.0;
+      // 平均的なトレイルペース：フラット換算で時速 6.5km 程度と仮定
+      const rawHours = flatDist / 6.5;
+      const totalMinutes = Math.max(30, Math.round((rawHours * 60) / 15) * 15);
+      state.hours = Math.floor(totalMinutes / 60);
+      state.minutes = totalMinutes % 60;
+
+      document.getElementById('hoursInput').value = state.hours;
+      document.getElementById('minutesInput').value = state.minutes;
+    }
+
+    function getTotalHours() {
+      return Math.max(0.25, state.hours + state.minutes / 60);
+    }
+
+    // ==========================================
+    // 5. 水分・カロリー・塩分のメイン計算ロジック
+    // ==========================================
+    function calculateMetrics(shouldUpdateFoodSuggestion = false) {
+      const totalHours = getTotalHours();
+
+      // 1. フラット換算距離 (km) = 距離 + (D+ / 1000 * 8)
+      const flatDist = state.distance + (state.elevation / 1000) * 8.0;
+      document.getElementById('flatDistText').textContent = `${flatDist.toFixed(1)} km`;
+
+      // 2. 総消費カロリーと目標補給カロリー（距離・累積標高 ＋ 予想行動時間で変動！）
+      // ・コース移動にかかるエネルギー：体重 × フラット換算距離 × 0.72
+      // ・行動時間に応じた継続運動＆基礎維持エネルギー：体重 × 行動時間(h) × 1.85
+      const courseMoveKcal = state.weight * flatDist * 0.72;
+      const durationBurnKcal = state.weight * totalHours * 1.85;
+      const totalBurnKcal = Math.round(courseMoveKcal + durationBurnKcal);
+
+      // 行動時間が長くなるほど体内のグリコーゲン貯蔵が減るため、外から補給すべき割合（補給率）が上昇する
+      // 例: 1.5時間→約30%、5時間→約45%、8時間以上→約55%
+      const intakeRatio = Math.min(0.58, 0.26 + totalHours * 0.036);
+
+      // さらに「行動1時間あたりに必要な糖質・エネルギー補給（体重×3.2kcal/h）」も加味してブレンド
+      const ratioBasedIntake = totalBurnKcal * intakeRatio;
+      const hourlyBasedIntake = state.weight * totalHours * 3.2;
+      const targetIntakeKcal = Math.max(
+        100,
+        Math.round(((ratioBasedIntake * 0.65 + hourlyBasedIntake * 0.35)) / 10) * 10
+      );
+
+      state.targetCalories = targetIntakeKcal;
+
+      // 3. トータル必要水分量 (ml)
+      // 【改善】時間が長くなれば比例して増え、気温が下がればしっかり減るリアルな計算式
+      // （冬場 5℃前後・4時間行動・体重62kg で ちょうど約1,000ml になる設計）
+      // まず気温(state.temp)に応じた「体重1kg・1時間あたりの基礎水分需要 (ml/kg/h)」を算出
+      let mlPerKgPerHour = 4.0;
+      const t = state.temp;
+
+      if (t <= 0) {
+        // 氷点下〜0℃：発汗はかなり少ない（体重62kgで約190〜200ml/h）
+        mlPerKgPerHour = Math.max(2.6, 3.2 + t * 0.08);
+      } else if (t <= 10) {
+        // 冬〜肌寒い（0℃〜10℃）：5℃のとき 4.0 ml/kg/h → 体重62kg×4h ＝ 992ml（約1.0L）
+        mlPerKgPerHour = 3.2 + t * 0.16; // 0℃:3.2, 5℃:4.0, 10℃:4.8
+      } else if (t <= 20) {
+        // 快適〜春・秋（10℃〜20℃）：15℃で 5.8 ml/kg/h（約360ml/h）、20℃で 6.8 ml/kg/h（約420ml/h）
+        mlPerKgPerHour = 4.8 + (t - 10) * 0.20;
+      } else {
+        // 夏山・高温（20℃超）：発汗が急増（25℃で8.4, 30℃で10.0, 35℃で11.6 ml/kg/h）
+        mlPerKgPerHour = 6.8 + (t - 20) * 0.32;
+      }
+
+      // 行動時間(totalHours)に比例してベース水分量が決まる
+      const baseWater = state.weight * totalHours * mlPerKgPerHour;
+
+      // 天気補正（日射による体感温度・発汗変化）
+      let weatherFactor = 1.0;
+      if (state.weather === 'sunny') weatherFactor = 1.06;
+      if (state.weather === 'rainy') weatherFactor = 0.90;
+
+      // 湿度補正（高湿度時は汗が乾きにくく発汗増、乾燥時はやや減）
+      let humidityFactor = 1.0;
+      if (state.humidity >= 75) {
+        humidityFactor = 1.08;
+      } else if (state.humidity <= 40) {
+        humidityFactor = 0.95;
+      }
+
+      const weatherHumidityFactor = weatherFactor * humidityFactor;
+      // 50ml単位で丸める（時間が長くなれば増え、気温が下がれば減る）
+      const totalWaterMl = Math.max(200, Math.round((baseWater * weatherHumidityFactor) / 50) * 50);
+      state.totalWaterMl = totalWaterMl;
+
+      // 快適期(15℃)基準との比較倍率（バッジ表示用）
+      const totalFactor = (mlPerKgPerHour / 5.8) * weatherHumidityFactor;
+
+      // 4. 推奨塩分（ナトリウム食塩相当量 g）
+      // 水分1000mlあたり 約1.5g の塩分補給を目安
+      const recommendedSaltG = Math.round((totalWaterMl / 1000) * 1.5 * 10) / 10;
+      state.recommendedSaltG = recommendedSaltG;
+
+      // 5. サマリーUIの更新
+      document.getElementById('totalWaterText').textContent = totalWaterMl.toLocaleString();
+      document.getElementById('waterPerHourText').textContent = `約 ${Math.round(totalWaterMl / totalHours)} ml / 時間`;
+      const flaskCount = (totalWaterMl / 500).toFixed(1);
+      document.getElementById('flaskCountText').textContent = `約 ${flaskCount} 本分`;
+
+      document.getElementById('targetCaloriesText').textContent = targetIntakeKcal.toLocaleString();
+      document.getElementById('goalCaloriesInline').textContent = targetIntakeKcal.toLocaleString();
+      document.getElementById('calPerHourText').textContent = `約 ${Math.round(targetIntakeKcal / totalHours)} kcal / 時間`;
+      document.getElementById('totalBurnText').textContent = `${totalBurnKcal.toLocaleString()} kcal`;
+
+      // 発汗係数バッジとアドバイスの更新
+      const badge = document.getElementById('conditionBadge');
+      if (totalFactor >= 1.3) {
+        badge.textContent = '⚠️ 多量発汗注意（高温・多湿）';
+        badge.className = 'text-xs bg-rose-500/30 border border-rose-400/40 px-2.5 py-1 rounded-full text-rose-200 font-bold';
+      } else if (totalFactor <= 0.85) {
+        badge.textContent = '❄️ 発汗少なめ（低温）';
+        badge.className = 'text-xs bg-sky-500/30 border border-sky-400/40 px-2.5 py-1 rounded-full text-sky-200 font-bold';
+      } else {
+        badge.textContent = `発汗補正: ×${totalFactor.toFixed(2)}`;
+        badge.className = 'text-xs bg-white/10 px-2.5 py-1 rounded-full text-emerald-200 font-medium';
+      }
+
+      document.getElementById('adviceText').innerHTML =
+        `全行程での塩分補給目安は <strong>約 ${recommendedSaltG}g</strong> です。` +
+        (totalFactor >= 1.25
+          ? '気温・湿度が高いため、水だけでなく経口補水液やスポドリ、柿ピー・梅干し等で意識的に塩分を摂りましょう！'
+          : 'おにぎりや柿ピーで塩分を摂りつつ、1時間に1回は必ず何かを口にしてエネルギー切れを防ぎましょう。');
+
+      // 補給食の自動提案（コースや時間が変わった場合）
+      if (shouldUpdateFoodSuggestion) {
+        autoSuggestFood(targetIntakeKcal, totalHours);
+      }
+      renderFoodList();
+    }
+
+    // ==========================================
+    // 6. コンビニ補給食の自動提案アルゴリズム
+    // ==========================================
+    function autoSuggestFood(targetKcal, totalHours) {
+      // 全アイテム（カスタム追加分含む）のカウントを一旦0にリセット
+      const counts = {};
+      FOOD_ITEMS.forEach((item) => {
+        counts[item.id] = 0;
+      });
+
+      let remaining = targetKcal;
+
+      // 1) 4時間以上の行動で目標カロリーが900kcal以上なら、まず腹持ちの良い「菓子パン」を1袋入れる
+      if (totalHours >= 4.0 && remaining >= 900) {
+        counts.sweet_bread += 1;
+        remaining -= 300;
+      }
+
+      // 2) 5時間以上のロング行動なら、後半の胃腸疲労対策に「inゼリー」を1個入れる
+      if (totalHours >= 5.0 && remaining >= 500) {
+        counts.in_jelly += 1;
+        remaining -= 180;
+      }
+
+      // 3) 塩分＆食感アクセントとして「柿ピー」を1袋（長時間なら2袋）入れる
+      if (remaining >= 250) {
+        counts.kaki_pi += 1;
+        remaining -= 140;
+      }
+      if (totalHours >= 7.0 && remaining >= 600) {
+        counts.kaki_pi += 1;
+        remaining -= 140;
+      }
+
+      // 4) 残りのカロリーを「おにぎり → 羊羹 → ブラックサンダー」の順でバランスよく埋める
+      const cycle = [
+        { id: 'onigiri', kcal: 180 },
+        { id: 'yokan', kcal: 150 },
+        { id: 'black_thunder', kcal: 110 }
+      ];
+
+      let idx = 0;
+      let guard = 0;
+      while (remaining >= 90 && guard < 40) {
+        const item = cycle[idx % cycle.length];
+        counts[item.id] += 1;
+        remaining -= item.kcal;
+        idx++;
+        guard++;
+      }
+
+      state.foodCounts = counts;
+    }
+
+    // ==========================================
+    // 7. 補給食リストとリアルタイムゲージの描画
+    // ==========================================
+    function renderFoodList() {
+      const listContainer = document.getElementById('foodItemsList');
+      listContainer.innerHTML = '';
+
+      let totalSelectedKcal = 0;
+      let totalSelectedSalt = 0;
+
+      FOOD_ITEMS.forEach((item) => {
+        const count = state.foodCounts[item.id] || 0;
+        const subKcal = count * item.kcal;
+        const subSalt = count * item.salt;
+        totalSelectedKcal += subKcal;
+        totalSelectedSalt += subSalt;
+
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between p-3 sm:p-3.5 rounded-xl border transition ${
+          count > 0
+            ? 'bg-emerald-50/40 border-emerald-200 shadow-sm'
+            : 'bg-white border-slate-200 opacity-75 hover:opacity-100'
+        }`;
+
+        row.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0 pr-2">
+            <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">
+              ${item.emoji}
+            </div>
+            <div class="min-w-0">
+              <div class="font-bold text-slate-800 text-sm sm:text-base truncate">${item.name}</div>
+              <div class="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2">
+                <span class="font-semibold text-emerald-700">${item.kcal} kcal / 1${item.unit}</span>
+                <span>(塩分 ${item.salt}g)</span>
+                <span class="hidden sm:inline text-slate-400">・${item.desc}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div class="text-right mr-1 hidden sm:block">
+              <div class="text-xs font-bold text-slate-700">${subKcal} kcal</div>
+            </div>
+            <button type="button" data-action="dec" data-id="${item.id}"
+              class="w-9 h-9 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 active:scale-95 text-slate-700 font-bold flex items-center justify-center transition">
+              <i class="ph-bold ph-minus"></i>
+            </button>
+            <div class="w-10 text-center">
+              <span class="text-base sm:text-lg font-extrabold ${count > 0 ? 'text-emerald-700' : 'text-slate-400'}">${count}</span>
+              <span class="text-[10px] text-slate-500 block -mt-1">${item.unit}</span>
+            </div>
+            <button type="button" data-action="inc" data-id="${item.id}"
+              class="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold flex items-center justify-center shadow-sm transition">
+              <i class="ph-bold ph-plus"></i>
+            </button>
+            ${
+              !item.isDefault
+                ? `<button type="button" data-action="delete" data-id="${item.id}" title="リストから削除"
+                    class="w-8 h-9 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition">
+                    <i class="ph-bold ph-trash"></i>
+                  </button>`
+                : ''
+            }
+          </div>
+        `;
+
+        listContainer.appendChild(row);
+      });
+
+      // ＋ / ー / 削除 ボタンのイベント登録
+      listContainer.querySelectorAll('button[data-action]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          const action = btn.getAttribute('data-action');
+          if (action === 'inc') {
+            state.foodCounts[id] = (state.foodCounts[id] || 0) + 1;
+          } else if (action === 'dec') {
+            state.foodCounts[id] = Math.max(0, (state.foodCounts[id] || 0) - 1);
+          } else if (action === 'delete') {
+            FOOD_ITEMS = FOOD_ITEMS.filter((item) => item.id !== id);
+            delete state.foodCounts[id];
+            saveCustomFoods();
+            showToast('カスタム食品を削除しました');
+          }
+          renderFoodList();
+        });
+      });
+
+      // 合計カロリー＆プログレスバーの更新
+      document.getElementById('selectedCaloriesText').textContent = totalSelectedKcal.toLocaleString();
+      document.getElementById('selectedSaltText').textContent = totalSelectedSalt.toFixed(1);
+
+      const ratio = Math.min(130, Math.round((totalSelectedKcal / state.targetCalories) * 100));
+      const bar = document.getElementById('calorieProgressBar');
+      const statusMsg = document.getElementById('calorieStatusMessage');
+      const diff = totalSelectedKcal - state.targetCalories;
+
+      bar.style.width = `${Math.min(100, ratio)}%`;
+
+      if (Math.abs(diff) <= 120) {
+        bar.className = 'h-full bg-emerald-500 transition-all duration-300 rounded-full';
+        statusMsg.className = 'font-bold text-emerald-700';
+        statusMsg.textContent = '✨ バッチリ！目標補給カロリーにぴったりの構成です';
+      } else if (diff < -120) {
+        bar.className = 'h-full bg-amber-500 transition-all duration-300 rounded-full';
+        statusMsg.className = 'font-bold text-amber-700';
+        statusMsg.textContent = `⚠️ 目標より ${Math.abs(diff)} kcal 少なめです（＋ボタンで追加推奨）`;
+      } else {
+        bar.className = 'h-full bg-sky-500 transition-all duration-300 rounded-full';
+        statusMsg.className = 'font-bold text-sky-700';
+        statusMsg.textContent = `🎒 目標より +${diff} kcal 多めです（予備食も含めて安心な量です）`;
+      }
+    }
+
+    // ==========================================
+    // 8. 買い物リストのクリップボードコピー
+    // ==========================================
+    function copyShoppingList() {
+      const weatherLabel = state.weather === 'sunny' ? '☀️晴れ' : state.weather === 'cloudy' ? '☁️曇り' : '🌧️雨';
+      const selectedFoods = FOOD_ITEMS.filter((item) => (state.foodCounts[item.id] || 0) > 0);
+
+      let totalKcal = 0;
+      let totalSalt = 0;
+      const foodLines = selectedFoods.map((item) => {
+        const c = state.foodCounts[item.id];
+        totalKcal += c * item.kcal;
+        totalSalt += c * item.salt;
+        return `・${item.emoji} ${item.name}：${c}${item.unit} (${c * item.kcal}kcal)`;
+      });
+
+      const text = [
+        `⛰️【トレラン補給＆水分計画】`,
+        `📅 走行予定日：${state.selectedDate || '未指定'}`,
+        `📏 コース：${state.distance}km / D+ ${state.elevation}m`,
+        `⏱️ 行動予定：${state.hours}時間${state.minutes}分`,
+        `🌡️ 気象条件：${weatherLabel} / 気温${state.temp}℃ / 湿度${state.humidity}%`,
+        `--------------------------`,
+        `💧 必要水分量：${state.totalWaterMl.toLocaleString()} ml（500ml×約${(state.totalWaterMl / 500).toFixed(1)}本）`,
+        `🔥 目標補給量：${state.targetCalories.toLocaleString()} kcal`,
+        `--------------------------`,
+        `🏪【コンビニ買い物リスト】（計 ${totalKcal}kcal / 塩分 ${totalSalt.toFixed(1)}g）`,
+        ...(foodLines.length > 0 ? foodLines : ['・選択された補給食はありません'])
+      ].join('\n');
+
+      // iFrame環境でも確実に動作するコピー処理
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('買い物リストをクリップボードにコピーしました！');
+      } catch (e) {
+        showToast('コピーに失敗しました');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // トースト通知表示
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = msg;
+      toast.classList.remove('opacity-0');
+      toast.classList.add('opacity-100');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+      }, 2800);
+    }
+  </script>
+</body>
+</html>
